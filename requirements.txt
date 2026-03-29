@@ -1,0 +1,51 @@
+# AI-Based Picture Text Mining and Translation System
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# Windows GPU Acceleration Support
+torch ; sys_platform == 'win32'
+torchvision ; sys_platform == 'win32'
+torchaudio ; sys_platform == 'win32'
+paddlepaddle-gpu ; sys_platform == 'win32'
+
+# Core AI
+groq
+torch ; sys_platform != 'win32'
+torchvision ; sys_platform != 'win32'
+transformers
+sentencepiece
+accelerate
+
+# OCR Engines
+pytesseract
+easyocr
+paddleocr
+python-doctr[torch]
+
+# Image Processing
+opencv-python-headless
+Pillow
+scikit-image
+imutils
+
+# Language Detection
+langdetect
+fasttext-wheel
+
+# Translation
+deep-translator
+requests
+
+# Data Mining & Metrics
+pandas
+scikit-learn
+nltk
+numpy
+
+# Visualization
+matplotlib
+seaborn
+
+# UI & Deployment
+streamlit
+pyngrok
+flask

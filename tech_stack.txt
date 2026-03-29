@@ -1,0 +1,78 @@
+# AI-Based Picture Text Mining and Translation System
+## Technology Stack
+
+The following is a complete list of the technological components and libraries used in this project:
+
+### 1. Core AI & Machine Learning
+- groq
+- torch (GPU Support for Windows)
+- torchvision
+- torchaudio
+- paddlepaddle-gpu (Windows)
+- transformers
+- sentencepiece
+
+### 2. Optical Character Recognition (OCR) Engines
+- pytesseract
+- easyocr
+- paddleocr
+- python-doctr[torch]
+
+### 3. Image Processing & Computer Vision
+- opencv-python-headless (OpenCV)
+- Pillow (PIL)
+- scikit-image
+- imutils
+
+### 4. Language Detection & NLP
+- langdetect
+- fasttext-wheel
+- nltk
+
+### 5. Translation
+- Sarvam AI API (Primary specialized translation engine for Indian languages)
+- googletrans (v4.0.0-rc1)
+- MarianMT (Hugging Face transformers - offline general translation)
+- IndicTrans2 (offline Indian language translation - placeholder support)
+- requests
+
+### 6. Data Mining, Metrics & Analysis
+- pandas
+- scikit-learn
+- numpy
+
+### 7. Data Visualization
+- matplotlib
+- seaborn
+
+### 8. User Interface (UI) & Deployment
+- streamlit
+- flask
+- pyngrok
+
+---
+
+## How It Works (System Architecture & Pipeline)
+
+The system is built as a web application (using Flask) that processes uploaded images through a 7-stage automated pipeline:
+
+**1. Image Preprocessing (OpenCV / scikit-image)**
+When an image is uploaded via the web interface, it is first preprocessed. The system analyzes the image type and applies enhancements (like grayscale conversion and noise reduction) to ensure the OCR engines have the highest quality input possible.
+
+**2. OCR Ensemble (PyTesseract, EasyOCR, PaddleOCR, Doctr)**
+Instead of relying on a single underlying OCR engine, the system passes the preprocessed image through an ensemble of multiple OCR tools. It compares the outputs from all engines and selects the "winning" text based on an agreement score, ensuring maximum accuracy out of the box.
+
+**3. AI Post-Correction (Groq LLM)**
+Because raw OCR is often imperfect, the extracted text is sent to an AI model (via the Groq API) to intelligently fix spelling errors, correct grammar nuances, and restore logical context that the OCR engines might have missed.
+
+**4. Language Detection (Langdetect & Fasttext)**
+The corrected text is analyzed to automatically detect its primary language. If the text contains a mixture of multiple languages, the system divides it into distinct language segments.
+
+**5. Translation (Googletrans)**
+If the detected language is different from the user's requested target language, the text is translated seamlessly. The system is smart enough to handle multi-segment translation if multiple languages were present in the source image.
+
+**6. Data Mining & Error Categorization**
+The system extracts structural patterns from the final text and meticulously categorizes the errors that the AI had to fix by comparing the raw OCR output against the AI-corrected output.
+
+**7. Metrics, Visualization & Export**
+Finally, the system calculates accuracy metrics like CER (Character Error Rate) and BLEU scores. All processing data is securely saved to a CSV file (`ocr_results.csv`), data visualization charts are generated (using Matplotlib/Seaborn), and the final translated, corrected result is sent back to the web frontend for the user to view.

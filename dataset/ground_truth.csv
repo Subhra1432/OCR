@@ -1,0 +1,4 @@
+image_name,correct_text,language,source
+sample_printed.png,"This is a sample printed text for OCR testing.",en,manual
+sample_hindi.png,"यह एक परीक्षण वाक्य है।",hi,manual
+sample_mixed.png,"Hello दुनिया this is mixed text.",en+hi,manual

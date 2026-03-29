@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Picture Text Mining & Translation</title>
+    <meta name="description" content="AI-powered OCR system with multi-engine ensemble, Groq AI correction, and multi-language translation.">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- HEADER -->
+    <!-- ═══════════════════════════════════════════ -->
+    <header class="app-header">
+        <div class="header-left">
+            <h1>AI Picture Text Mining & Translation</h1>
+            <p class="subtitle">Triple OCR Ensemble · Groq AI Correction · Multi-Language Translation</p>
+        </div>
+        <div class="header-right">
+            <div id="api-status" class="api-badge loading">
+                <span class="dot"></span>
+                <span id="api-text">Checking API...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- UPLOAD SECTION -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="upload-section" id="upload-section">
+            <div class="upload-zone" id="upload-zone">
+                <div class="upload-icon">Upload</div>
+                <h2>Drop your image here</h2>
+                <p>or click to browse · Supports PNG, JPG, JPEG, BMP, TIFF, WebP</p>
+                <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.bmp,.tiff,.tif,.webp" hidden>
+            </div>
+
+            <div class="upload-options">
+                <div class="option-group">
+                    <label for="target-lang">Target Language</label>
+                    <select id="target-lang">
+                        <option value="en" selected>English</option>
+                        <option value="hi">Hindi</option>
+                        <option value="bn">Bengali</option>
+                        <option value="ta">Tamil</option>
+                        <option value="te">Telugu</option>
+                        <option value="kn">Kannada</option>
+                        <option value="ml">Malayalam</option>
+                        <option value="gu">Gujarati</option>
+                        <option value="mr">Marathi</option>
+                    </select>
+                </div>
+                <div class="option-group">
+                    <label for="ground-truth">Ground Truth (optional)</label>
+                    <textarea id="ground-truth" rows="2" placeholder="Exact correct text for CER calculation..."></textarea>
+                </div>
+                <div class="option-group">
+                    <label for="ref-translation">Reference Translation (optional)</label>
+                    <textarea id="ref-translation" rows="2" placeholder="Correct translation for BLEU score..."></textarea>
+                </div>
+            </div>
+
+            <div class="export-row">
+                <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
+                <button class="btn btn-secondary" onclick="exportCharts()">Export Charts</button>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- PROCESSING SPINNER -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="processing-section" id="processing-section" style="display:none">
+            <div class="spinner-container">
+                <div class="spinner"></div>
+                <h2 id="processing-text">Processing image...</h2>
+                <p class="processing-sub">Running OCR ensemble → AI correction → Translation → Mining</p>
+            </div>
+        </section>
+
+        <!-- ═══════════════════════════════════════════ -->
+        <!-- RESULTS SECTION -->
+        <!-- ═══════════════════════════════════════════ -->
+        <section class="results-section" id="results-section" style="display:none">
+
+            <!-- Summary Banner -->
+            <div class="summary-banner" id="summary-banner">
+                <div class="banner-left">
+                    <div class="banner-status" id="banner-status">High Confidence</div>
+                    <div class="banner-preview" id="banner-preview"></div>
+                </div>
+                <div class="banner-right">
+                    <div class="gauge-group">
+                        <div class="mini-gauge" id="gauge-pipeline"><svg viewBox="0 0 36 36"><path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><path class="gauge-fill" id="gauge-pipeline-fill" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><text x="18" y="21" class="gauge-text" id="gauge-pipeline-text">0%</text></svg><span>Pipeline</span></div>
+                        <div class="mini-gauge" id="gauge-ocr"><svg viewBox="0 0 36 36"><path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><path class="gauge-fill" id="gauge-ocr-fill" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><text x="18" y="21" class="gauge-text" id="gauge-ocr-text">0%</text></svg><span>OCR</span></div>
+                        <div class="mini-gauge" id="gauge-lang"><svg viewBox="0 0 36 36"><path class="gauge-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><path class="gauge-fill" id="gauge-lang-fill" stroke-dasharray="0,100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/><text x="18" y="21" class="gauge-text" id="gauge-lang-text">0%</text></svg><span>Lang</span></div>
+                    </div>
+                    <div class="banner-time" id="banner-time">0.0s</div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs" id="tabs">
+                <button class="tab active" data-tab="tab-images">Images</button>
+                <button class="tab" data-tab="tab-ocr">OCR</button>
+                <button class="tab" data-tab="tab-ai">AI Correction</button>
+                <button class="tab" data-tab="tab-translation">Translation</button>
+                <button class="tab" data-tab="tab-patterns">Patterns</button>
+                <button class="tab" data-tab="tab-metrics">Metrics</button>
+            </div>
+
+            <!-- Tab: Images -->
+            <div class="tab-content active" id="tab-images">
+                <div class="image-compare">
+                    <div class="image-card">
+                        <h3>Original</h3>
+                        <img id="img-original" src="" alt="Original">
+                    </div>
+                    <div class="image-card">
+                        <h3 id="img-processed-label">Processed</h3>
+                        <img id="img-processed" src="" alt="Processed">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab: OCR -->
+            <div class="tab-content" id="tab-ocr">
+                <div id="ocr-results"></div>
+                <div class="gauge-bar-container">
+                    <label>OCR Agreement Score</label>
+                    <div class="gauge-bar"><div class="gauge-bar-fill" id="ocr-agreement-bar"></div></div>
+                    <p class="gauge-info" id="ocr-reason"></p>
+                </div>
+            </div>
+
+            <!-- Tab: AI Correction -->
+            <div class="tab-content" id="tab-ai">
+                <div id="ai-results"></div>
+            </div>
+
+            <!-- Tab: Translation -->
+            <div class="tab-content" id="tab-translation">
+                <div id="translation-results"></div>
+                <div class="gauge-bar-container">
+                    <label>Translation Confidence</label>
+                    <div class="gauge-bar"><div class="gauge-bar-fill" id="trans-confidence-bar"></div></div>
+                </div>
+            </div>
+
+            <!-- Tab: Patterns -->
+            <div class="tab-content" id="tab-patterns">
+                <div id="patterns-results"></div>
+            </div>
+
+            <!-- Tab: Metrics -->
+            <div class="tab-content" id="tab-metrics">
+                <div class="metrics-grid" id="metrics-grid"></div>
+                <div class="usage-section" id="usage-section"></div>
+            </div>
+
+            <!-- Process another -->
+            <div class="process-another">
+                <button class="btn btn-primary" onclick="resetUI()">Process Another Image</button>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>AI-Based Picture Text Mining & Translation System · Powered by Groq · Tesseract · PaddleOCR · EasyOCR</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

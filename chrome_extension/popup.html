@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OCR & Translate</title>
+  <link rel="stylesheet" href="popup.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><span class="highlight">OCR</span> & Translate</h1>
+      <p>Local AI Picture Text Mining</p>
+    </header>
+
+    <main>
+      <div class="action-buttons">
+        <button id="captureBtn" class="secondary-btn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <span>Capture Screen</span>
+        </button>
+      </div>
+
+      <div id="uploadZone" class="upload-zone">
+        <input type="file" id="fileInput" accept="image/*" hidden />
+        <div class="upload-content">
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+          </svg>
+          <p>Or Upload / Paste Image</p>
+        </div>
+        <img id="imagePreview" class="hidden" src="" alt="Preview" />
+      </div>
+
+      <div class="controls">
+        <div class="input-group">
+          <label for="targetLang">Target Language</label>
+          <select id="targetLang">
+            <option value="en">English (en)</option>
+            <option value="hi">Hindi (hi)</option>
+            <option value="es">Spanish (es)</option>
+            <option value="fr">French (fr)</option>
+            <option value="de">German (de)</option>
+            <option value="ja">Japanese (ja)</option>
+            <option value="zh">Chinese (zh)</option>
+          </select>
+        </div>
+        
+        <button id="processBtn" class="primary-btn" disabled>
+          <span>Extract & Translate</span>
+          <div id="btnSpinner" class="spinner hidden"></div>
+        </button>
+      </div>
+
+      <div id="results" class="results-container hidden">
+        <div class="result-card">
+          <div class="card-header">
+            <h3>Extracted Text</h3>
+            <span id="cerBadge" class="badge"></span>
+          </div>
+          <div class="card-body">
+            <p id="extractedText" class="text-content"></p>
+          </div>
+        </div>
+
+        <div class="result-card translation-card">
+          <div class="card-header">
+            <h3>Translation</h3>
+            <span id="langBadge" class="badge highlight-badge"></span>
+          </div>
+          <div class="card-body">
+            <p id="translatedText" class="text-content"></p>
+          </div>
+        </div>
+      </div>
+      
+      <div id="errorMessage" class="error-container hidden"></div>
+    </main>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

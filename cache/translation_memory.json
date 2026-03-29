@@ -1,0 +1,56 @@
+{
+  "hello world|hi": {
+    "translation": "हैलो वर्ल्ड",
+    "model": "google",
+    "confidence": 0.95,
+    "timestamp": 1774331328.074341
+  },
+  "శ|en": {
+    "translation": "Sh",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774331458.299697
+  },
+  "க|en": {
+    "translation": "K",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774331459.4915452
+  },
+  "வலை|en": {
+    "translation": "web",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774331460.513563
+  },
+  "ടട|en": {
+    "translation": "Tada",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774331461.592461
+  },
+  "க்‌|en": {
+    "translation": "K",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774331462.966027
+  },
+  "ಜು|en": {
+    "translation": "Ju",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774331463.957401
+  },
+  "पोचँ क कमनक प पा चनरन मनक प|en": {
+    "translation": "pochan ka kamanak pa pa chanran manak pa",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774331509.612292
+  },
+  "पोचँ क कमन मनक प पा सनर न|en": {
+    "translation": "Poach ka kaman manak pa pa sunar na",
+    "model": "google",
+    "confidence": 0.7,
+    "timestamp": 1774334635.901226
+  }
+}

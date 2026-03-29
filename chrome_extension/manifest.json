@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "OCR & Translate",
+  "version": "1.1.0",
+  "description": "Extract and translate text from images or your current screen instantly.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "OCR & Translate"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://localhost:9090/*",
+    "http://127.0.0.1:9090/*"
+  ]
+}
