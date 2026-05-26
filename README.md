@@ -1,3 +1,12 @@
+---
+title: Ai Ocr Mining
+emoji: 🚀
+colorFrom: gray
+colorTo: gray
+sdk: docker
+pinned: false
+---
+
 # AI-Based Picture Text Mining and Translation
 
 This project extracts text from images, improves OCR quality with an LLM, detects the source language, translates the result, and saves outputs for later analysis. It includes both a desktop app built with Tkinter and a web app built with Flask.
