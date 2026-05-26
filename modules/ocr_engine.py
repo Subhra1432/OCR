@@ -148,7 +148,7 @@ def _text_quality(text: str) -> float:
 def _run_tesseract(image: np.ndarray) -> str:
     """Run Tesseract OCR."""
     candidates = []
-    for lang in ("eng", TESSERACT_LANGS):
+    for lang in (TESSERACT_LANGS, "eng"):
         if not lang:
             continue
         try:
@@ -171,7 +171,7 @@ def _run_tesseract(image: np.ndarray) -> str:
 def _run_easyocr(image: np.ndarray) -> str:
     """Run EasyOCR."""
     candidates = []
-    for languages in (["en"], ["en", "hi"]):
+    for languages in (EASYOCR_LANGS, ["en"]):
         reader = _EngineCache.easyocr(languages)
         results = reader.readtext(image, detail=0, paragraph=True)
         text = "\n".join(results).strip()
