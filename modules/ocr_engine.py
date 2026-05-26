@@ -348,14 +348,23 @@ def run_ocr(image: np.ndarray, image_type: str) -> dict:
     engine_results: Dict[str, str] = {}
     engine_times: Dict[str, float] = {}
 
-    # Run sequentially to avoid ThreadPoolExecutor deadlocks with Paddle/EasyOCR on macOS
-    for name in engines:
-        name, text, elapsed = _run_engine_safe(name, image)
-        engine_results[name] = text
-        engine_times[name] = elapsed
-        if name != "paddleocr" and _should_skip_remaining_engines(engine_results):
-            logger.info("Skipping remaining OCR engines after confident early result")
-            break
+    # Run in parallel on Linux/Docker backend to maximize performance and avoid gateway timeouts;
+    # Run sequentially on macOS to prevent ThreadPoolExecutor deadlocks with Paddle/EasyOCR.
+    if sys.platform == "darwin":
+        for name in engines:
+            name, text, elapsed = _run_engine_safe(name, image)
+            engine_results[name] = text
+            engine_times[name] = elapsed
+            if name != "paddleocr" and _should_skip_remaining_engines(engine_results):
+                logger.info("Skipping remaining OCR engines after confident early result")
+                break
+    else:
+        with ThreadPoolExecutor(max_workers=len(engines)) as executor:
+            futures = {executor.submit(_run_engine_safe, name, image): name for name in engines}
+            for future in as_completed(futures):
+                name, text, elapsed = future.result()
+                engine_results[name] = text
+                engine_times[name] = elapsed
 
     winner, best_text, agreement = _smart_vote(engine_results)
 

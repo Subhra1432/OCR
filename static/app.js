@@ -66,7 +66,14 @@ function processFile(file) {
     formData.append('groq_api_key', localStorage.getItem('user_api_key') || '');
 
     fetch('/upload', { method: 'POST', body: formData })
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) {
+                return res.json().catch(() => {
+                    throw new Error(`Server returned status ${res.status}: ${res.statusText || 'Error'}`);
+                });
+            }
+            return res.json();
+        })
         .then(data => {
             processingSec.style.display = 'none';
             if (data.error) {
@@ -405,7 +412,14 @@ function checkAPI() {
     }
 
     fetch('/api/status', { headers })
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) {
+                return res.json().catch(() => {
+                    throw new Error(`Server status ${res.status}`);
+                });
+            }
+            return res.json();
+        })
         .then(data => {
             const badge = document.getElementById('api-status');
             const text = document.getElementById('api-text');
