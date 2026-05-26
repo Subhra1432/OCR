@@ -129,6 +129,11 @@ def upload():
     target_lang = request.form.get("target_lang", "en")
     ground_truth = request.form.get("ground_truth", "").strip() or None
     ref_translation = request.form.get("ref_translation", "").strip() or None
+    user_api_key = request.form.get("groq_api_key", "").strip()
+
+    orig_env_key = os.environ.get("GROQ_API_KEY")
+    if user_api_key:
+        os.environ["GROQ_API_KEY"] = user_api_key
 
     try:
         from modules.preprocessing import preprocess_image
@@ -284,11 +289,17 @@ def upload():
             os.remove(save_path)
         except Exception:
             pass
+        # Restore original environment key
+        if orig_env_key is not None:
+            os.environ["GROQ_API_KEY"] = orig_env_key
+        else:
+            os.environ.pop("GROQ_API_KEY", None)
 
 
 @app.route("/api/status")
 def api_status():
-    key = os.environ.get("GROQ_API_KEY", "")
+    user_key = request.headers.get("X-User-API-Key", "").strip()
+    key = user_key or os.environ.get("GROQ_API_KEY", "")
     masked = (key[:8] + "..." + key[-4:]) if key else ""
     try:
         from modules.ai_correction import get_usage_stats

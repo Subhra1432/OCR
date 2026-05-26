@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAPI();
     setupUpload();
     setupTabs();
+    setupAPIKeyInput();
 });
 
 
@@ -62,6 +63,7 @@ function processFile(file) {
     formData.append('target_lang', document.getElementById('target-lang').value);
     formData.append('ground_truth', document.getElementById('ground-truth').value);
     formData.append('ref_translation', document.getElementById('ref-translation').value);
+    formData.append('groq_api_key', localStorage.getItem('user_api_key') || '');
 
     fetch('/upload', { method: 'POST', body: formData })
         .then(res => res.json())
@@ -375,25 +377,55 @@ function switchTab(tabId) {
 // API STATUS
 // ════════════════════════════════════════════════════
 
+function setupAPIKeyInput() {
+    const badge = document.getElementById('api-status');
+    if (badge) {
+        badge.style.cursor = 'pointer';
+        badge.title = 'Click to configure Groq API Key';
+        badge.addEventListener('click', () => {
+            const currentKey = localStorage.getItem('user_api_key') || '';
+            const key = prompt('Enter your Groq API Key (saved in browser):', currentKey);
+            if (key !== null) {
+                if (key.trim()) {
+                    localStorage.setItem('user_api_key', key.trim());
+                } else {
+                    localStorage.removeItem('user_api_key');
+                }
+                checkAPI();
+            }
+        });
+    }
+}
+
 function checkAPI() {
-    fetch('/api/status')
+    const localKey = localStorage.getItem('user_api_key') || '';
+    const headers = {};
+    if (localKey) {
+        headers['X-User-API-Key'] = localKey;
+    }
+
+    fetch('/api/status', { headers })
         .then(res => res.json())
         .then(data => {
             const badge = document.getElementById('api-status');
             const text = document.getElementById('api-text');
             badge.classList.remove('loading');
+            badge.classList.remove('ok', 'error');
             if (data.has_key) {
                 badge.classList.add('ok');
                 text.textContent = `Key: ${data.masked_key}`;
             } else {
                 badge.classList.add('error');
-                text.textContent = 'API key not set';
+                text.textContent = 'API key not set (Click to set)';
             }
         })
         .catch(() => {
-            document.getElementById('api-status').classList.remove('loading');
-            document.getElementById('api-status').classList.add('error');
-            document.getElementById('api-text').textContent = 'Connection error';
+            const badge = document.getElementById('api-status');
+            const text = document.getElementById('api-text');
+            badge.classList.remove('loading');
+            badge.classList.remove('ok');
+            badge.classList.add('error');
+            text.textContent = 'Connection error';
         });
 }
 
