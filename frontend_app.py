@@ -21,8 +21,12 @@ def proxy_upload():
     file = request.files["image"]
     files = {"image": (file.filename, file.stream, file.mimetype)}
     
-    # Forward form data
+    # Forward form data and inject server-side API key if missing
     data = {k: v for k, v in request.form.items()}
+    if not data.get("groq_api_key"):
+        server_key = os.environ.get("GROQ_API_KEY", "")
+        if server_key:
+            data["groq_api_key"] = server_key
     
     # Forward to HF
     resp = requests.post(f"{HF_BACKEND_URL}/upload", files=files, data=data)
@@ -35,7 +39,12 @@ def proxy_upload():
 
 @app.route("/api/status", methods=["GET"])
 def proxy_status():
-    headers = {"X-User-API-Key": request.headers.get("X-User-API-Key", "")}
+    # Inject server-side API key if client didn't provide one
+    user_key = request.headers.get("X-User-API-Key", "")
+    if not user_key:
+        user_key = os.environ.get("GROQ_API_KEY", "")
+        
+    headers = {"X-User-API-Key": user_key}
     resp = requests.get(f"{HF_BACKEND_URL}/api/status", headers=headers)
     
     excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
@@ -45,7 +54,12 @@ def proxy_status():
 
 @app.route("/api/translate", methods=["POST"])
 def proxy_translate():
-    headers = {"X-Groq-Api-Key": request.headers.get("X-Groq-Api-Key", ""), "Content-Type": "application/json"}
+    # Inject server-side API key if client didn't provide one
+    user_key = request.headers.get("X-Groq-Api-Key", "")
+    if not user_key:
+        user_key = os.environ.get("GROQ_API_KEY", "")
+        
+    headers = {"X-Groq-Api-Key": user_key, "Content-Type": "application/json"}
     resp = requests.post(f"{HF_BACKEND_URL}/api/translate", json=request.get_json(), headers=headers)
     
     excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
