@@ -1,7 +1,7 @@
 """
-Module 5 — Four-Layer Translation Engine
+Module 5 — Five-Layer Translation Engine
 ──────────────────────────────────────────────────
-Sarvam AI → IndicTrans2 → MarianMT → Google Translate
+Groq AI → Sarvam AI → IndicTrans2 → MarianMT → Google Translate
 with runtime-aware backend selection and
 persistent translation memory cache.
 """
@@ -19,6 +19,8 @@ from config.settings import (
     SARVAM_API_URL, SARVAM_API_KEY,
     TRANSLATION_WEIGHTS, TARGET_LANGUAGE,
     TRANS_MEMORY, SCHEDULED_LANGUAGES,
+    GROQ_API_KEY, GROQ_PRIMARY_MODEL, GROQ_FALLBACK_MODEL,
+    GROQ_MAX_TOKENS, GROQ_MAX_RETRIES, GROQ_BACKOFF_BASE,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,12 +72,108 @@ _memory = TranslationMemory()
 
 
 # ════════════════════════════════════════════════════
+# LANGUAGE NAME MAP
+# ════════════════════════════════════════════════════
+
+_LANG_NAMES = {
+    "en": "English", "hi": "Hindi", "bn": "Bengali", "ta": "Tamil",
+    "te": "Telugu", "kn": "Kannada", "ml": "Malayalam", "gu": "Gujarati",
+    "mr": "Marathi", "or": "Odia", "pa": "Punjabi", "ur": "Urdu",
+    "de": "German", "fr": "French", "es": "Spanish", "it": "Italian",
+    "pt": "Portuguese", "ru": "Russian", "zh": "Chinese", "ja": "Japanese",
+    "ko": "Korean", "ar": "Arabic",
+}
+
+
+# ════════════════════════════════════════════════════
+# GROQ AI TRANSLATION PROMPT
+# ════════════════════════════════════════════════════
+
+_GROQ_TRANSLATE_PROMPT = """You are a professional translator with deep expertise in all world languages, especially Indian languages (Hindi, Bengali, Tamil, Telugu, Kannada, Malayalam, Gujarati, Marathi, Odia, Punjabi).
+
+Translate the following text from {source_language} to {target_language}.
+
+RULES:
+- Produce ONLY the translated text, nothing else
+- Do NOT add explanations, notes, or commentary
+- Do NOT include the original text in your response
+- Preserve the original meaning, tone, and formatting
+- Keep proper nouns, brand names, and technical terms as-is (transliterate if needed)
+- Keep numbers in standard Arabic numerals (0-9)
+- If the text is already in the target language, return it as-is
+
+TEXT TO TRANSLATE:
+{text}"""
+
+
+# ════════════════════════════════════════════════════
 # INDIVIDUAL TRANSLATION BACKENDS
 # ════════════════════════════════════════════════════
 
+def _get_groq_client():
+    """Create Groq client for translation."""
+    try:
+        from groq import Groq
+        api_key = os.environ.get("GROQ_API_KEY") or GROQ_API_KEY
+        if not api_key:
+            logger.warning("GROQ_API_KEY not set for translation")
+            return None
+        return Groq(api_key=api_key)
+    except Exception as e:
+        logger.warning(f"Groq client init failed: {e}")
+        return None
+
+
+def _translate_groq(text: str, source_lang: str,
+                    target_lang: str) -> Optional[str]:
+    """Groq AI (Llama 3.3 70B) — highest quality translation for all languages."""
+    client = _get_groq_client()
+    if client is None:
+        return None
+
+    source_name = _LANG_NAMES.get(source_lang, source_lang)
+    target_name = _LANG_NAMES.get(target_lang, target_lang)
+
+    prompt = _GROQ_TRANSLATE_PROMPT.format(
+        source_language=source_name,
+        target_language=target_name,
+        text=text,
+    )
+
+    models_to_try = [GROQ_PRIMARY_MODEL, GROQ_FALLBACK_MODEL]
+
+    for model in models_to_try:
+        for attempt in range(GROQ_MAX_RETRIES):
+            try:
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=GROQ_MAX_TOKENS,
+                    temperature=0.1,  # slight creativity for natural translations
+                )
+                result = response.choices[0].message.content.strip()
+                if result:
+                    logger.info(f"Groq translation OK ({model}): {len(result)} chars")
+                    return result
+            except Exception as e:
+                error_type = type(e).__name__
+                if "RateLimitError" in error_type or "429" in str(e):
+                    delay = GROQ_BACKOFF_BASE * (2 ** attempt)
+                    logger.warning(f"Groq rate limit ({model}, attempt {attempt+1}), waiting {delay}s")
+                    time.sleep(delay)
+                    if attempt == GROQ_MAX_RETRIES - 1:
+                        break  # try next model
+                else:
+                    logger.warning(f"Groq translation error ({model}): {e}")
+                    break  # try next model
+
+    logger.warning("Groq translation: all models failed")
+    return None
+
+
 def _translate_sarvam(text: str, source_lang: str,
                       target_lang: str) -> Optional[str]:
-    """Sarvam AI — primary for Indian languages."""
+    """Sarvam AI — secondary for Indian languages."""
     import requests
     api_key = os.environ.get("SARVAM_API_KEY") or SARVAM_API_KEY
     if not api_key:
@@ -189,15 +287,18 @@ def _marian_enabled() -> bool:
 
 def _preferred_backends(is_indian: bool, availability: dict) -> List[str]:
     if is_indian:
-        order = ["sarvam", "google", "marianmt"]
+        order = ["groq", "sarvam", "google", "marianmt"]
     else:
-        order = ["google", "marianmt", "sarvam"]
+        order = ["groq", "google", "marianmt", "sarvam"]
     return [name for name in order if availability.get(name)]
 
 
 def _confidence_for_backend(model: str, is_indian: bool) -> float:
     if model == "none":
         return 0.0
+    # Groq AI always gets highest confidence
+    if model == "groq":
+        return 0.95
     return round(min(0.95, 0.55 + _get_weight(model, is_indian)), 2)
 
 
@@ -216,6 +317,10 @@ def check_model_availability() -> dict:
         status["internet"] = True
     except Exception:
         status["internet"] = False
+
+    # Groq AI — highest priority
+    groq_key = os.environ.get("GROQ_API_KEY") or GROQ_API_KEY
+    status["groq"] = bool(groq_key) and status["internet"]
 
     # Sarvam
     api_key = os.environ.get("SARVAM_API_KEY") or SARVAM_API_KEY
@@ -248,6 +353,7 @@ def check_model_availability() -> dict:
 # ════════════════════════════════════════════════════
 
 BACKENDS = {
+    "groq":        _translate_groq,
     "sarvam":      _translate_sarvam,
     "indictrans2": _translate_indictrans2,
     "marianmt":    _translate_marianmt,
