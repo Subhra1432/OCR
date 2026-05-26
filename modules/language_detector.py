@@ -65,34 +65,62 @@ def _word_language_unicode(word: str) -> str:
 
 _ft_model = None
 
+def _patch_numpy_for_fasttext():
+    """
+    Patch NumPy 2.x `copy=False` incompatibility inside fasttext's own namespace.
+
+    fasttext.FastText.py does `import numpy as np` at module level, then calls
+    `np.array(probs, copy=False)` in predict(). On NumPy 2.x this raises
+    ValueError because copy semantics changed. We must patch the `np.array`
+    reference *inside* the fasttext.FastText module, not just in the global
+    numpy namespace.
+    """
+    try:
+        import numpy as np
+        # Only needed for NumPy 2.x
+        if int(np.__version__.split(".")[0]) < 2:
+            return
+
+        import fasttext.FastText as _ft_mod
+        _original = np.array
+
+        def _safe_array(obj, *args, **kwargs):
+            if kwargs.get("copy") is False:
+                try:
+                    return _original(obj, *args, **kwargs)
+                except ValueError as e:
+                    if "Unable to avoid copy" in str(e):
+                        kwargs.pop("copy", None)
+                        return np.asarray(obj, *args, **kwargs)
+                    raise
+            return _original(obj, *args, **kwargs)
+
+        # Patch inside fasttext's module namespace so its `np.array` resolves
+        # to our safe wrapper
+        _ft_mod.np.array = _safe_array
+        # Also patch globally for any other callers
+        if not hasattr(np, "_patched_for_fasttext"):
+            np.array = _safe_array
+            np._patched_for_fasttext = True
+
+        logger.info("Patched numpy.array for NumPy 2.x / fastText compatibility")
+    except Exception as e:
+        logger.warning(f"Failed to patch numpy for fasttext compat: {e}")
+
+
 def _load_fasttext():
     """Download and load the fastText language identification model."""
     global _ft_model
     if _ft_model is not None:
         return _ft_model
     try:
-        # Patch NumPy 2.x compatibility issue with fastText predict copy=False
-        try:
-            import numpy as np
-            if not hasattr(np, "_patched_for_fasttext"):
-                original_array = np.array
-                def patched_array(object, *args, **kwargs):
-                    if kwargs.get("copy") is False:
-                        try:
-                            return original_array(object, *args, **kwargs)
-                        except ValueError as e:
-                            if "Unable to avoid copy" in str(e):
-                                kwargs.pop("copy", None)
-                                return np.asarray(object, *args, **kwargs)
-                            raise
-                    return original_array(object, *args, **kwargs)
-                np.array = patched_array
-                np._patched_for_fasttext = True
-        except Exception as patch_err:
-            logger.warning(f"Failed to patch numpy for fasttext compatibility: {patch_err}")
-
         import fasttext
         import urllib.request
+
+        # Apply the numpy patch AFTER fasttext is imported so we can reach
+        # into its module namespace
+        _patch_numpy_for_fasttext()
+
         model_path = "/tmp/lid.176.ftz"
         if not os.path.exists(model_path):
             url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
@@ -114,7 +142,19 @@ def _detect_by_fasttext(text: str) -> Tuple[str, float]:
     text_clean = text.replace("\n", " ").strip()
     if not text_clean:
         return ("unknown", 0.0)
-    predictions = model.predict(text_clean, k=1)
+    try:
+        predictions = model.predict(text_clean, k=1)
+    except ValueError as e:
+        # Last-resort fallback: if the numpy patch didn't take effect,
+        # manually call the C predict and wrap the result
+        if "Unable to avoid copy" in str(e):
+            import numpy as np
+            logger.warning("model.predict copy=False fallback triggered")
+            raw = model.f.predict(text_clean, 1, 0.0)
+            labels = [l.replace("__label__", "") for l in raw[0]]
+            probs = np.asarray(raw[1])
+            return (labels[0], float(probs[0])) if labels else ("unknown", 0.0)
+        raise
     label = predictions[0][0].replace("__label__", "")
     confidence = float(predictions[1][0])
     return (label, confidence)
