@@ -349,6 +349,65 @@ def export_charts():
                      mimetype="application/zip")
 
 
+@app.route("/api/translate", methods=["POST"])
+def api_translate():
+    """External API endpoint for standalone text translation."""
+    data = request.get_json() or {}
+    text = data.get("text")
+    target_lang = data.get("target_lang", "en")
+    
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
+        
+    user_api_key = request.headers.get("X-Groq-Api-Key", "").strip()
+    orig_env_key = os.environ.get("GROQ_API_KEY")
+    if user_api_key:
+        os.environ["GROQ_API_KEY"] = user_api_key
+        
+    try:
+        from modules.language_detector import detect_language
+        from modules.translation_engine import translate_text
+        
+        # Determine source language
+        lang = detect_language(text)
+        
+        if lang["primary_language"] == target_lang:
+            return jsonify({
+                "success": True,
+                "original_text": text,
+                "detected_language": lang["primary_language"],
+                "target_language": target_lang,
+                "translation": text,
+                "model_used": "passthrough",
+                "confidence": 1.0
+            })
+            
+        translation = translate_text(
+            text, 
+            source_lang=lang["primary_language"],
+            target_lang=target_lang, 
+            is_indian=lang["is_indian"]
+        )
+        
+        return jsonify({
+            "success": True,
+            "original_text": text,
+            "detected_language": lang["primary_language"],
+            "target_language": target_lang,
+            "translation": translation["best_translation"],
+            "model_used": translation["best_model"],
+            "confidence": translation.get("confidence", 0)
+        })
+    except Exception as e:
+        logger.error(f"Translation API error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if orig_env_key is not None:
+            os.environ["GROQ_API_KEY"] = orig_env_key
+        else:
+            os.environ.pop("GROQ_API_KEY", None)
+
+
 # ════════════════════════════════════════════════════
 # ENTRY POINT
 # ════════════════════════════════════════════════════

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ai-ocr-mining
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -w 1 -b 0.0.0.0:$PORT web_app:app --timeout 120"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.6
+      - key: GROQ_API_KEY
+        sync: false
