@@ -39,7 +39,7 @@ requests
 pandas
 scikit-learn
 nltk
-numpy
+numpy<2.0.0
 
 # Visualization
 matplotlib

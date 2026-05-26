@@ -71,6 +71,26 @@ def _load_fasttext():
     if _ft_model is not None:
         return _ft_model
     try:
+        # Patch NumPy 2.x compatibility issue with fastText predict copy=False
+        try:
+            import numpy as np
+            if not hasattr(np, "_patched_for_fasttext"):
+                original_array = np.array
+                def patched_array(object, *args, **kwargs):
+                    if kwargs.get("copy") is False:
+                        try:
+                            return original_array(object, *args, **kwargs)
+                        except ValueError as e:
+                            if "Unable to avoid copy" in str(e):
+                                kwargs.pop("copy", None)
+                                return np.asarray(object, *args, **kwargs)
+                            raise
+                    return original_array(object, *args, **kwargs)
+                np.array = patched_array
+                np._patched_for_fasttext = True
+        except Exception as patch_err:
+            logger.warning(f"Failed to patch numpy for fasttext compatibility: {patch_err}")
+
         import fasttext
         import urllib.request
         model_path = "/tmp/lid.176.ftz"
