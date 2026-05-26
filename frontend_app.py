@@ -19,6 +19,7 @@ def proxy_upload():
         return {"error": "No image"}, 400
     
     file = request.files["image"]
+    file.stream.seek(0)
     files = {"image": (file.filename, file.stream, file.mimetype)}
     
     # Forward form data and inject server-side API key if missing
@@ -29,13 +30,17 @@ def proxy_upload():
             data["groq_api_key"] = server_key
     
     # Forward to HF
-    resp = requests.post(f"{HF_BACKEND_URL}/upload", files=files, data=data)
-    
-    # Return response as-is
-    excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-    headers = [(name, value) for (name, value) in resp.raw.headers.items()
-               if name.lower() not in excluded_headers]
-    return Response(resp.content, resp.status_code, headers)
+    try:
+        resp = requests.post(f"{HF_BACKEND_URL}/upload", files=files, data=data)
+        
+        # Return response as-is
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        headers = [(name, value) for (name, value) in resp.raw.headers.items()
+                   if name.lower() not in excluded_headers]
+        return Response(resp.content, resp.status_code, headers)
+    except Exception as e:
+        import traceback
+        return {"error": f"Proxy error: {str(e)}\n{traceback.format_exc()}"}, 500
 
 @app.route("/api/status", methods=["GET"])
 def proxy_status():
