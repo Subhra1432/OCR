@@ -427,6 +427,7 @@ if __name__ == "__main__":
         print(f"  Failed to preload OCR engines: {e}")
 
     print()
-    print("  Open in your browser: http://localhost:9090")
+    port = int(os.environ.get("PORT", 9090))
+    print(f"  Open in your browser: http://localhost:{port}")
     print("=" * 60)
-    app.run(host="0.0.0.0", port=9090, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)
