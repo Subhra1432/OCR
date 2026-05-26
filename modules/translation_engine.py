@@ -287,7 +287,7 @@ def _marian_enabled() -> bool:
 
 def _preferred_backends(is_indian: bool, availability: dict) -> List[str]:
     if is_indian:
-        order = ["groq", "sarvam", "google", "marianmt"]
+        order = ["sarvam", "groq", "google", "marianmt"]
     else:
         order = ["groq", "google", "marianmt", "sarvam"]
     return [name for name in order if availability.get(name)]

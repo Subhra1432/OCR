@@ -117,7 +117,7 @@ def _text_quality(text: str) -> float:
     if not text:
         return 0.0
 
-    tokens = re.findall(r"\w+", text, flags=re.UNICODE)
+    tokens = re.findall(r"[\w\u0900-\u0DFF\u0600-\u06FF]+", text)
     if not tokens:
         return 0.0
 
@@ -125,7 +125,7 @@ def _text_quality(text: str) -> float:
     avg_token_len = sum(len(token) for token in tokens) / word_count
     single_char_ratio = sum(len(token) <= 1 for token in tokens) / word_count
     unique_token_ratio = len({token.lower() for token in tokens}) / word_count
-    alnum_ratio = sum(ch.isalnum() or ch.isspace() for ch in text) / len(text)
+    alnum_ratio = sum(ch.isalnum() or ch.isspace() or (0x0900 <= ord(ch) <= 0x0DFF) or (0x0600 <= ord(ch) <= 0x06FF) for ch in text) / len(text)
     newline_ratio = text.count("\n") / word_count
 
     quality = 0.35 * alnum_ratio
