@@ -126,6 +126,7 @@ def upload():
     save_path = str(UPLOAD_DIR / file.filename)
     file.save(save_path)
 
+    source_lang = request.form.get("source_lang", "auto").strip().lower()
     target_lang = request.form.get("target_lang", "en")
     ground_truth = request.form.get("ground_truth", "").strip() or None
     ref_translation = request.form.get("ref_translation", "").strip() or None
@@ -154,7 +155,7 @@ def upload():
         prep = preprocess_image(save_path)
 
         # Stage 2: OCR
-        ocr = run_ocr(prep["processed"], prep["image_type"])
+        ocr = run_ocr(prep["processed"], prep["image_type"], source_lang=source_lang)
 
         # Stage 3: AI Correction
         correction = correct_text(

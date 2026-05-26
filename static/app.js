@@ -60,6 +60,7 @@ function processFile(file) {
 
     const formData = new FormData();
     formData.append('image', file);
+    formData.append('source_lang', document.getElementById('source-lang').value);
     formData.append('target_lang', document.getElementById('target-lang').value);
     formData.append('ground_truth', document.getElementById('ground-truth').value);
     formData.append('ref_translation', document.getElementById('ref-translation').value);

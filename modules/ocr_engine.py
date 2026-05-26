@@ -145,19 +145,34 @@ def _text_quality(text: str) -> float:
 # INDIVIDUAL ENGINE RUNNERS
 # ────────────────────────────────────────────────
 
-def _run_tesseract(image: np.ndarray) -> str:
+# Tesseract language mapping for user-selected source languages
+_TESS_LANG_MAP = {
+    "en": "eng",
+    "hi": "eng+hin",
+    "bn": "eng+ben",
+    "ta": "eng+tam",
+    "te": "eng+tel",
+    "kn": "eng+kan",
+    "ml": "eng+mal",
+    "gu": "eng+guj",
+    "mr": "eng+hin"
+}
+
+
+def _run_tesseract(image: np.ndarray, lang: Optional[str] = None) -> str:
     """Run Tesseract OCR."""
     candidates = []
-    for lang in (TESSERACT_LANGS, "eng"):
-        if not lang:
+    langs_to_try = (lang,) if lang else (TESSERACT_LANGS, "eng")
+    for l in langs_to_try:
+        if not l:
             continue
         try:
-            text = pytesseract.image_to_string(image, lang=lang).strip()
+            text = pytesseract.image_to_string(image, lang=l).strip()
         except Exception as e:
-            logger.warning("Tesseract %s failed: %s", lang, e)
+            logger.warning("Tesseract %s failed: %s", l, e)
             continue
-        candidates.append((lang, text, _text_quality(text)))
-        if candidates[-1][2] >= 0.85:
+        candidates.append((l, text, _text_quality(text)))
+        if len(langs_to_try) > 1 and candidates[-1][2] >= 0.85:
             break
 
     if not candidates:
@@ -323,7 +338,7 @@ def _smart_vote(results: Dict[str, str]) -> Tuple[str, str, float]:
 # PUBLIC API
 # ────────────────────────────────────────────────
 
-def run_ocr(image: np.ndarray, image_type: str) -> dict:
+def run_ocr(image: np.ndarray, image_type: str, source_lang: str = "auto") -> dict:
     """
     Run the OCR ensemble for the given image type.
 
@@ -331,6 +346,7 @@ def run_ocr(image: np.ndarray, image_type: str) -> dict:
     ----------
     image : np.ndarray — preprocessed image (BGR)
     image_type : str — 'printed' | 'handwritten' | 'mixed'
+    source_lang : str — selected language code, or 'auto'
 
     Returns
     -------
@@ -343,43 +359,26 @@ def run_ocr(image: np.ndarray, image_type: str) -> dict:
         reason          : str              — why the winner was chosen
     """
     engines = ENGINE_ROUTING.get(image_type, ENGINE_ROUTING["mixed"])
-    logger.info(f"Running OCR ensemble for '{image_type}': {engines}")
+    logger.info(f"Running OCR ensemble for '{image_type}' with source_lang='{source_lang}': {engines}")
 
     engine_results: Dict[str, str] = {}
     engine_times: Dict[str, float] = {}
 
-    # 1. Run Tesseract first to detect language and guide EasyOCR configuration
-    if "tesseract" in engines:
-        name, text, elapsed = _run_engine_safe("tesseract", image)
-        engine_results[name] = text
-        engine_times[name] = elapsed
-
-    # 2. Detect likely languages from Tesseract text
-    tess_text = engine_results.get("tesseract", "")
-    detected_lang = "en"
-    if tess_text.strip():
-        try:
-            from modules.language_detector import detect_language
-            lang_info = detect_language(tess_text)
-            primary = lang_info.get("primary_language", "en")
-            # Only use primary if it is one of the supported EasyOCR languages
-            if primary in EASYOCR_LANGS and primary != "en":
-                detected_lang = primary
-                logger.info(f"Tesseract pre-pass detected language: {detected_lang}")
-        except Exception as e:
-            logger.warning(f"Language detection pre-pass failed: {e}")
-
-    # Dynamically select EasyOCR languages to avoid performance degradation from loading too many models
-    active_easyocr_langs = ["en", detected_lang] if detected_lang != "en" else ["en"]
-    logger.info(f"Dynamically configured EasyOCR languages: {active_easyocr_langs}")
-
-    # 3. Run remaining engines (EasyOCR, PaddleOCR)
-    remaining = [e for e in engines if e != "tesseract"]
-    if remaining:
+    if source_lang != "auto":
+        # OPTIMIZED PATH: Language is pre-selected. Run all engines concurrently in parallel.
+        active_easyocr_langs = ["en", source_lang] if source_lang != "en" else ["en"]
+        tess_lang = _TESS_LANG_MAP.get(source_lang, "eng")
+        
+        logger.info(f"Pre-selected OCR configs: EasyOCR={active_easyocr_langs}, Tesseract={tess_lang}")
+        
         if sys.platform == "darwin":
             # Run sequentially on macOS
-            for name in remaining:
-                if name == "easyocr":
+            for name in engines:
+                if name == "tesseract":
+                    name, text, elapsed = _run_engine_safe("tesseract", image)
+                    engine_results[name] = text
+                    engine_times[name] = elapsed
+                elif name == "easyocr":
                     t0 = time.time()
                     try:
                         reader = _EngineCache.easyocr(active_easyocr_langs)
@@ -396,12 +395,22 @@ def run_ocr(image: np.ndarray, image_type: str) -> dict:
                     engine_results[name] = text
                     engine_times[name] = elapsed
         else:
-            # Run in parallel on Linux for maximum performance
-            with ThreadPoolExecutor(max_workers=len(remaining)) as executor:
+            # Run all concurrently in parallel on Linux/Docker
+            with ThreadPoolExecutor(max_workers=len(engines)) as executor:
                 futures = {}
-                for name in remaining:
-                    if name == "easyocr":
-                        def run_easy_dynamic():
+                for name in engines:
+                    if name == "tesseract":
+                        def run_tess_specific():
+                            t0 = time.time()
+                            try:
+                                text = _run_tesseract(image, lang=tess_lang)
+                                return "tesseract", text, time.time() - t0
+                            except Exception as e:
+                                logger.warning(f"  ✗ tesseract failed: {e}")
+                                return "tesseract", "", time.time() - t0
+                        futures[executor.submit(run_tess_specific)] = name
+                    elif name == "easyocr":
+                        def run_easy_specific():
                             t0 = time.time()
                             try:
                                 reader = _EngineCache.easyocr(active_easyocr_langs)
@@ -410,14 +419,81 @@ def run_ocr(image: np.ndarray, image_type: str) -> dict:
                             except Exception as e:
                                 logger.warning(f"  ✗ easyocr failed: {e}")
                                 return "easyocr", "", time.time() - t0
-                        futures[executor.submit(run_easy_dynamic)] = name
+                        futures[executor.submit(run_easy_specific)] = name
                     else:
                         futures[executor.submit(_run_engine_safe, name, image)] = name
-                
+                        
                 for future in as_completed(futures):
                     name, text, elapsed = future.result()
                     engine_results[name] = text
                     engine_times[name] = elapsed
+    else:
+        # AUTO DETECT PATH: Two-stage pipeline. Run Tesseract first, detect language, then run remaining in parallel.
+        if "tesseract" in engines:
+            name, text, elapsed = _run_engine_safe("tesseract", image)
+            engine_results[name] = text
+            engine_times[name] = elapsed
+
+        tess_text = engine_results.get("tesseract", "")
+        detected_lang = "en"
+        if tess_text.strip():
+            try:
+                from modules.language_detector import detect_language
+                lang_info = detect_language(tess_text)
+                primary = lang_info.get("primary_language", "en")
+                if primary in EASYOCR_LANGS and primary != "en":
+                    detected_lang = primary
+                    logger.info(f"Tesseract pre-pass detected language: {detected_lang}")
+            except Exception as e:
+                logger.warning(f"Language detection pre-pass failed: {e}")
+
+        active_easyocr_langs = ["en", detected_lang] if detected_lang != "en" else ["en"]
+        logger.info(f"Dynamically configured EasyOCR languages: {active_easyocr_langs}")
+
+        remaining = [e for e in engines if e != "tesseract"]
+        if remaining:
+            if sys.platform == "darwin":
+                # Run sequentially on macOS
+                for name in remaining:
+                    if name == "easyocr":
+                        t0 = time.time()
+                        try:
+                            reader = _EngineCache.easyocr(active_easyocr_langs)
+                            results = reader.readtext(image, detail=0, paragraph=True)
+                            text = "\n".join(results).strip()
+                            engine_results[name] = text
+                            logger.info(f"  ✓ easyocr finished in {time.time()-t0:.1f}s")
+                        except Exception as e:
+                            logger.warning(f"  ✗ easyocr failed: {e}")
+                            engine_results[name] = ""
+                        engine_times[name] = time.time() - t0
+                    else:
+                        name, text, elapsed = _run_engine_safe(name, image)
+                        engine_results[name] = text
+                        engine_times[name] = elapsed
+            else:
+                # Run in parallel on Linux
+                with ThreadPoolExecutor(max_workers=len(remaining)) as executor:
+                    futures = {}
+                    for name in remaining:
+                        if name == "easyocr":
+                            def run_easy_dynamic():
+                                t0 = time.time()
+                                try:
+                                    reader = _EngineCache.easyocr(active_easyocr_langs)
+                                    results = reader.readtext(image, detail=0, paragraph=True)
+                                    return "easyocr", "\n".join(results).strip(), time.time() - t0
+                                except Exception as e:
+                                    logger.warning(f"  ✗ easyocr failed: {e}")
+                                    return "easyocr", "", time.time() - t0
+                            futures[executor.submit(run_easy_dynamic)] = name
+                        else:
+                            futures[executor.submit(_run_engine_safe, name, image)] = name
+                    
+                    for future in as_completed(futures):
+                        name, text, elapsed = future.result()
+                        engine_results[name] = text
+                        engine_times[name] = elapsed
 
     winner, best_text, agreement = _smart_vote(engine_results)
 
