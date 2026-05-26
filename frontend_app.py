@@ -9,6 +9,10 @@ import requests
 app = Flask(__name__)
 HF_BACKEND_URL = os.environ.get("HF_BACKEND_URL", "https://subhra1432-ai-ocr-mining.hf.space").rstrip('/')
 
+def _is_json_response(resp):
+    content_type = resp.headers.get("Content-Type", "").lower()
+    return "application/json" in content_type
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -34,6 +38,12 @@ def proxy_upload():
     try:
         resp = requests.post(f"{HF_BACKEND_URL}/upload", files=files, data=data)
         
+        # If the backend is waking up or building, it might return a 200/503 HTML wrapper page
+        if not _is_json_response(resp):
+            return {
+                "error": "The backend processing space is currently waking up or building. Please wait a moment and try again."
+            }, 503
+            
         # If the backend returned an error, make sure it's JSON so the frontend doesn't crash
         if resp.status_code >= 400:
             try:
@@ -61,6 +71,12 @@ def proxy_status():
     headers = {"X-User-API-Key": user_key}
     try:
         resp = requests.get(f"{HF_BACKEND_URL}/api/status", headers=headers)
+        
+        if not _is_json_response(resp):
+            return {
+                "error": "The backend processing space is currently waking up or building. Please wait a moment and try again."
+            }, 503
+
         if resp.status_code >= 400:
             try:
                 return resp.json(), resp.status_code
@@ -85,6 +101,12 @@ def proxy_translate():
     headers = {"X-Groq-Api-Key": user_key, "Content-Type": "application/json"}
     try:
         resp = requests.post(f"{HF_BACKEND_URL}/api/translate", json=request.get_json(), headers=headers)
+        
+        if not _is_json_response(resp):
+            return {
+                "error": "The backend processing space is currently waking up or building. Please wait a moment and try again."
+            }, 503
+
         if resp.status_code >= 400:
             try:
                 return resp.json(), resp.status_code
@@ -98,6 +120,32 @@ def proxy_translate():
     except Exception as e:
         import traceback
         return {"error": f"Proxy error: {str(e)}\n{traceback.format_exc()}"}, 500
+
+@app.route("/export/csv", methods=["GET"])
+def proxy_export_csv():
+    try:
+        resp = requests.get(f"{HF_BACKEND_URL}/export/csv")
+        if not resp.ok:
+            return {"error": f"Failed to export CSV: {resp.text[:200]}"}, resp.status_code
+        return Response(resp.content, resp.status_code, [
+            ("Content-Type", resp.headers.get("Content-Type", "text/csv")),
+            ("Content-Disposition", resp.headers.get("Content-Disposition", "attachment; filename=ocr_results.csv"))
+        ])
+    except Exception as e:
+        return {"error": f"Proxy error: {str(e)}"}, 500
+
+@app.route("/export/charts", methods=["GET"])
+def proxy_export_charts():
+    try:
+        resp = requests.get(f"{HF_BACKEND_URL}/export/charts")
+        if not resp.ok:
+            return {"error": f"Failed to export charts: {resp.text[:200]}"}, resp.status_code
+        return Response(resp.content, resp.status_code, [
+            ("Content-Type", resp.headers.get("Content-Type", "application/zip")),
+            ("Content-Disposition", resp.headers.get("Content-Disposition", "attachment; filename=ocr_charts.zip"))
+        ])
+    except Exception as e:
+        return {"error": f"Proxy error: {str(e)}"}, 500
 
 if __name__ == "__main__":
     print("=" * 60)
