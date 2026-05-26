@@ -19,7 +19,6 @@ accelerate
 pytesseract
 easyocr
 paddleocr
-python-doctr[torch]
 
 # Image Processing
 opencv-python-headless
@@ -37,7 +36,6 @@ requests
 
 # Data Mining & Metrics
 pandas
-scikit-learn
 nltk
 numpy<2.0.0
 
@@ -46,6 +44,4 @@ matplotlib
 seaborn
 
 # UI & Deployment
-streamlit
-pyngrok
 flask
