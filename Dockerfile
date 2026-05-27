@@ -19,11 +19,6 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download OCR models during build to avoid cold-start timeouts
-RUN python -c "import easyocr; easyocr.Reader(['en', 'hi', 'ta', 'te', 'bn', 'kn', 'ml'], gpu=False)"
-RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='en')"
-
-
 # Copy the rest of the application
 COPY . .
 

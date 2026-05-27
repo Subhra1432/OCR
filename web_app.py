@@ -421,8 +421,11 @@ if __name__ == "__main__":
 
     try:
         from modules.ocr_engine import _EngineCache
+        from config.settings import EASYOCR_LANGS
+        print("  Preloading PaddleOCR...")
         _EngineCache.paddleocr()
-        _EngineCache.easyocr()
+        print(f"  Preloading EasyOCR for languages: {EASYOCR_LANGS}...")
+        _EngineCache.easyocr(EASYOCR_LANGS)
         print("  OCR engines loaded successfully")
     except Exception as e:
         print(f"  Failed to preload OCR engines: {e}")
