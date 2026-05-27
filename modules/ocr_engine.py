@@ -477,32 +477,45 @@ def run_ocr(image: np.ndarray, image_type: str, source_lang: str = "auto") -> di
                     engine_results["tesseract"] = ""
                 engine_times["tesseract"] = time.time() - t0
             else:
-                # OSD failed/returned latin: try running TESSERACT_LANGS and "eng" candidates sequentially
+                # OSD failed/returned latin: run all Tesseract language candidates in parallel to find the best match
                 candidates = []
-                for l in (TESSERACT_LANGS, "eng"):
-                    t_cand = time.time()
+                tess_candidates = {
+                    "en": "eng",
+                    "hi": "eng+hin",
+                    "bn": "eng+ben",
+                    "ta": "eng+tam",
+                    "te": "eng+tel",
+                    "kn": "eng+kan",
+                    "ml": "eng+mal",
+                    "gu": "eng+guj",
+                }
+
+                def run_tess_cand(lang_code, tess_lang_str):
                     try:
-                        text = pytesseract.image_to_string(image, lang=l).strip()
+                        text = pytesseract.image_to_string(image, lang=tess_lang_str).strip()
                         q = _text_quality(text)
-                        candidates.append((l, text, q))
-                        if q >= 0.85:
-                            break
+                        return lang_code, text, q
                     except Exception as e:
-                        logger.warning(f"Tesseract candidate {l} failed: {e}")
+                        logger.warning(f"Tesseract candidate {lang_code} ({tess_lang_str}) failed: {e}")
+                        return lang_code, "", 0.0
+
+                with ThreadPoolExecutor(max_workers=len(tess_candidates)) as executor:
+                    futures = [
+                        executor.submit(run_tess_cand, lang_code, tess_lang_str)
+                        for lang_code, tess_lang_str in tess_candidates.items()
+                    ]
+                    for future in as_completed(futures):
+                        lang_code, text, q = future.result()
+                        if text:
+                            candidates.append((lang_code, text, q))
+
                 if candidates:
-                    best_l, best_text, best_q = max(candidates, key=lambda x: x[2])
+                    best_lang_code, best_text, best_q = max(candidates, key=lambda x: x[2])
                     engine_results["tesseract"] = best_text
                     engine_times["tesseract"] = time.time() - t0
-                    # Run language detection to set detected_lang if it's not eng
-                    if best_l != "eng" and best_text.strip():
-                        try:
-                            from modules.language_detector import detect_language
-                            lang_info = detect_language(best_text)
-                            primary = lang_info.get("primary_language", "en")
-                            if primary in EASYOCR_LANGS and primary != "en":
-                                detected_lang = primary
-                        except Exception as e:
-                            logger.warning(f"Language detection on candidate failed: {e}")
+                    if best_q >= 0.20:
+                        detected_lang = best_lang_code
+                        logger.info(f"Parallel candidates winner: {best_lang_code} with quality {best_q:.2f}")
                 else:
                     engine_results["tesseract"] = ""
                     engine_times["tesseract"] = time.time() - t0
