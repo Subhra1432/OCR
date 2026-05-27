@@ -6,6 +6,7 @@ torch ; sys_platform == 'win32'
 torchvision ; sys_platform == 'win32'
 torchaudio ; sys_platform == 'win32'
 paddlepaddle-gpu ; sys_platform == 'win32'
+paddlepaddle ; sys_platform != 'win32'
 
 # Core AI
 groq
