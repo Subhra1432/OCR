@@ -177,6 +177,7 @@ def _translate_sarvam(text: str, source_lang: str,
     import requests
     api_key = os.environ.get("SARVAM_API_KEY") or SARVAM_API_KEY
     if not api_key:
+        logger.warning("Sarvam AI translation requested but SARVAM_API_KEY not configured/available.")
         return None
         
     # Map ISO codes to Sarvam format (e.g., "hi" -> "hi-IN", "en" -> "en-IN")
@@ -186,6 +187,7 @@ def _translate_sarvam(text: str, source_lang: str,
     if target_lang in supported:
         target_lang = f"{target_lang}-IN"
 
+    logger.info(f"Calling Sarvam AI translation: {source_lang} -> {target_lang} for text of length {len(text)}")
     try:
         resp = requests.post(
             SARVAM_API_URL,
@@ -198,7 +200,9 @@ def _translate_sarvam(text: str, source_lang: str,
             timeout=15,
         )
         if resp.status_code == 200:
-            return resp.json().get("translated_text", None)
+            translated = resp.json().get("translated_text", None)
+            logger.info(f"Sarvam AI translation successful: {len(translated or '')} chars")
+            return translated
         logger.warning(f"Sarvam HTTP {resp.status_code}: {resp.text}")
     except Exception as e:
         logger.warning(f"Sarvam failed: {e}")

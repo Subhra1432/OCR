@@ -158,6 +158,31 @@ _TESS_LANG_MAP = {
     "mr": "eng+hin"
 }
 
+_SCRIPT_TO_LANG = {
+    "devanagari": "hi",
+    "bengali": "bn",
+    "tamil": "ta",
+    "telugu": "te",
+    "kannada": "kn",
+    "malayalam": "ml",
+    "gujarati": "gu",
+    "latin": "en"
+}
+
+
+def _detect_script_tesseract(image: np.ndarray) -> Optional[str]:
+    """Detect image script using Tesseract OSD."""
+    try:
+        osd = pytesseract.image_to_osd(image)
+        match = re.search(r"Script:\s*(\w+)", osd)
+        if match:
+            script = match.group(1).lower()
+            logger.info(f"Tesseract OSD detected script: {script}")
+            return _SCRIPT_TO_LANG.get(script)
+    except Exception as e:
+        logger.warning(f"Tesseract OSD failed: {e}")
+    return None
+
 
 def _run_tesseract(image: np.ndarray, lang: Optional[str] = None) -> str:
     """Run Tesseract OCR."""
@@ -428,15 +453,63 @@ def run_ocr(image: np.ndarray, image_type: str, source_lang: str = "auto") -> di
                     engine_results[name] = text
                     engine_times[name] = elapsed
     else:
-        # AUTO DETECT PATH: Two-stage pipeline. Run Tesseract first, detect language, then run remaining in parallel.
+        # AUTO DETECT PATH: Two-stage pipeline. Run OSD or candidate-based selection, detect language, then run remaining in parallel.
+        detected_lang = "en"
+        tess_lang = "eng"
+        
+        # Step 1: Try Tesseract OSD script detection first
+        script_lang = _detect_script_tesseract(image)
+        if script_lang:
+            detected_lang = script_lang
+            tess_lang = _TESS_LANG_MAP.get(detected_lang, "eng")
+            logger.info(f"OSD mapped language: {detected_lang}, tess_lang: {tess_lang}")
+        
+        # Step 2: Run Tesseract with the selected/fallback configs
         if "tesseract" in engines:
-            name, text, elapsed = _run_engine_safe("tesseract", image)
-            engine_results[name] = text
-            engine_times[name] = elapsed
+            t0 = time.time()
+            if script_lang:
+                # OSD worked, just run it
+                try:
+                    text = _run_tesseract(image, lang=tess_lang)
+                    engine_results["tesseract"] = text
+                except Exception as e:
+                    logger.warning(f"  ✗ tesseract failed: {e}")
+                    engine_results["tesseract"] = ""
+                engine_times["tesseract"] = time.time() - t0
+            else:
+                # OSD failed/returned latin: try running "eng" and "eng+hin" candidates sequentially
+                candidates = []
+                for l in ("eng", "eng+hin"):
+                    t_cand = time.time()
+                    try:
+                        text = pytesseract.image_to_string(image, lang=l).strip()
+                        q = _text_quality(text)
+                        candidates.append((l, text, q))
+                        if q >= 0.85:
+                            break
+                    except Exception as e:
+                        logger.warning(f"Tesseract candidate {l} failed: {e}")
+                if candidates:
+                    best_l, best_text, best_q = max(candidates, key=lambda x: x[2])
+                    engine_results["tesseract"] = best_text
+                    engine_times["tesseract"] = time.time() - t0
+                    # If eng+hin won and text looks Indian/Devanagari, set detected_lang to hi
+                    if "hin" in best_l:
+                        try:
+                            from modules.language_detector import detect_language
+                            lang_info = detect_language(best_text)
+                            primary = lang_info.get("primary_language", "en")
+                            if primary in EASYOCR_LANGS and primary != "en":
+                                detected_lang = primary
+                        except Exception:
+                            detected_lang = "hi"
+                else:
+                    engine_results["tesseract"] = ""
+                    engine_times["tesseract"] = time.time() - t0
 
         tess_text = engine_results.get("tesseract", "")
-        detected_lang = "en"
-        if tess_text.strip():
+        # Run secondary check on Tesseract output if language is still "en"
+        if detected_lang == "en" and tess_text.strip():
             try:
                 from modules.language_detector import detect_language
                 lang_info = detect_language(tess_text)
