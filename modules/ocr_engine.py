@@ -477,9 +477,9 @@ def run_ocr(image: np.ndarray, image_type: str, source_lang: str = "auto") -> di
                     engine_results["tesseract"] = ""
                 engine_times["tesseract"] = time.time() - t0
             else:
-                # OSD failed/returned latin: try running "eng" and "eng+hin" candidates sequentially
+                # OSD failed/returned latin: try running TESSERACT_LANGS and "eng" candidates sequentially
                 candidates = []
-                for l in ("eng", "eng+hin"):
+                for l in (TESSERACT_LANGS, "eng"):
                     t_cand = time.time()
                     try:
                         text = pytesseract.image_to_string(image, lang=l).strip()
@@ -493,16 +493,16 @@ def run_ocr(image: np.ndarray, image_type: str, source_lang: str = "auto") -> di
                     best_l, best_text, best_q = max(candidates, key=lambda x: x[2])
                     engine_results["tesseract"] = best_text
                     engine_times["tesseract"] = time.time() - t0
-                    # If eng+hin won and text looks Indian/Devanagari, set detected_lang to hi
-                    if "hin" in best_l:
+                    # Run language detection to set detected_lang if it's not eng
+                    if best_l != "eng" and best_text.strip():
                         try:
                             from modules.language_detector import detect_language
                             lang_info = detect_language(best_text)
                             primary = lang_info.get("primary_language", "en")
                             if primary in EASYOCR_LANGS and primary != "en":
                                 detected_lang = primary
-                        except Exception:
-                            detected_lang = "hi"
+                        except Exception as e:
+                            logger.warning(f"Language detection on candidate failed: {e}")
                 else:
                     engine_results["tesseract"] = ""
                     engine_times["tesseract"] = time.time() - t0
